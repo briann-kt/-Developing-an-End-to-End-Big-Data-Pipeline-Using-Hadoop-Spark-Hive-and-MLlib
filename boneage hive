@@ -1,0 +1,34 @@
+Create external table for bone age dataset
+CREATE EXTERNAL TABLE IF NOT EXISTS boneage_data (
+    id STRING,
+    boneage INT,
+    male INT
+)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE
+LOCATION 'gs://task17/';
+
+Export: Average Bone Age by Gender
+INSERT OVERaWRITE DIRECTORY 'gs://task17/hive-output/avg_boneage_by_gender'
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+SELECT male, AVG(boneage) AS avg_boneage
+FROM boneage_data
+GROUP BY male;
+
+Export: Sample Count by Gender
+INSERT OVERWRITE DIRECTORY 'gs://task17/hive-output/sample_count_by_gender'
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+SELECT male, COUNT(*) AS total_samples
+FROM boneage_data
+GROUP BY male;
+
+Export: Count of Records with Null Bone Age
+INSERT OVERWRITE DIRECTORY 'gs://task17/hive-output/null_boneage_count'
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+SELECT COUNT(*) AS null_boneage_count
+FROM boneage_data
+WHERE boneage IS NULL;
