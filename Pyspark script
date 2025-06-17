@@ -1,0 +1,68 @@
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, avg, count, desc
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("BoneAgePredictionAnalysis").getOrCreate()
+
+# Path to GCS file
+file_path = "gs://task17/boneage-training-dataset.csv"
+
+try:
+    # Load CSV with header
+    df = spark.read.option("header", "true").csv(file_path)
+    print("File loaded successfully.")
+except Exception as e:
+    print(f"ERROR: Failed to load file. Details: {e}")
+    spark.stop()
+    exit(1)
+
+# Print schema to verify column names
+df.printSchema()
+
+# Rename columns safely if needed (based on actual data structure)
+df = df.withColumnRenamed("boneage", "boneage") \
+       .withColumnRenamed("male", "male") \
+       .withColumnRenamed("id", "id")
+
+# Cast types with safe fallback
+df = df.withColumn("boneage", col("boneage").cast("int")) \
+       .withColumn("male", col("male").cast("int")) \
+       .withColumn("id", col("id").cast("string"))
+
+# Drop rows where boneage or gender is null (safe)
+df = df.dropna(subset=["boneage", "male"])
+
+# 1. Average bone age by gender
+df_gender_age = df.groupBy("male").agg(
+    avg("boneage").alias("average_bone_age")
+).orderBy(desc("average_bone_age"))
+
+df_gender_age.show()
+df_gender_age.write.mode("overwrite").csv(
+    "gs://task17/output/average_bone_age_by_gender", header=True
+)
+
+# 2. Sample count by gender
+df_gender_count = df.groupBy("male").agg(
+    count("id").alias("sample_count")
+).orderBy(desc("sample_count"))
+
+df_gender_count.show()
+df_gender_count.write.mode("overwrite").csv(
+    "gs://task17/output/sample_count_by_gender", header=True
+)
+
+# 3. Overall average bone age
+overall_avg_result = df.agg(avg("boneage").alias("overall_average")).collect()
+overall_avg = overall_avg_result[0]['overall_average']
+
+if overall_avg is not None:
+    print(f"Overall Average Bone Age: {overall_avg}")
+    spark.createDataFrame([(float(overall_avg),)], ["overall_average_bone_age"]) \
+         .write.mode("overwrite").csv("gs://task17/output/overall_average_bone_age", header=True)
+else:
+    print("No valid data to compute overall average bone age.")
+
+# Stop the Spark session
+spark.stop()
